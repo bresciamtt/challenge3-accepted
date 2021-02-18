@@ -11,6 +11,7 @@ module "autoscaling_group" {
 
   user_data = templatefile("${path.module}/template/user-data.sh", { cluster_id = module.ecs.this_ecs_cluster_id })
 
+  iam_instance_profile = aws_iam_instance_profile.asg_profile.id
   asg_name = "${terraform.workspace}-${var.project}-${var.stack}-asg"
   desired_capacity = var.asg_desired_capacity
   health_check_type = "EC2"

@@ -58,3 +58,33 @@ resource "aws_security_group" "task_ssh_sg" {
     security_groups = var.ssh_allowed_security_groups
   }
 }
+
+# AutoScalingGroup IAM role
+resource "aws_iam_role" "asg_role" {
+  name = "${terraform.workspace}-${var.project}-${var.stack}-asg-role"
+  path = "/ecs/"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# AutoScalingGroup instance profile. Will be used by the cluster EC2s
+resource "aws_iam_instance_profile" "asg_profile" {
+  name = "${terraform.workspace}-${var.project}-${var.stack}-asg-profile"
+  role = aws_iam_role.asg_role.name
+}
+
+# Attaching the policy needed to run ECS tasks
+resource "aws_iam_role_policy_attachment" "asg_role_policy_ecs" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+  role = aws_iam_role.asg_role.id
+}
