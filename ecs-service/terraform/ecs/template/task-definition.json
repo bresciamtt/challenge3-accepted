@@ -1,0 +1,15 @@
+[
+  {
+    "name": "${task_name}",
+    "image": "${registry}:${image_version}",
+    "cpu": ${cpu},
+    "memory": ${memory},
+    "portMappings": [
+      {
+        "containerPort": ${container_port},
+        "hostPort":, ${host_port},
+        "protocol": "tcp"
+      }
+    ]
+  }
+]
