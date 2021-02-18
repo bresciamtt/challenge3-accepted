@@ -1,4 +1,5 @@
-# ECS config
+#!/bin/bash
+
 {
   echo "ECS_CLUSTER=${cluster_id}"
 } >> /etc/ecs/ecs.config
