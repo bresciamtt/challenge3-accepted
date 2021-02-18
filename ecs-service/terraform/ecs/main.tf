@@ -61,7 +61,27 @@ resource "aws_security_group" "task_sg" {
     from_port = local.env_vars[terraform.workspace]["ecs_task_port"]
     to_port = local.env_vars[terraform.workspace]["ecs_task_port"]
     protocol = "TCP"
-    security_groups = []
+    security_groups = [aws_security_group.load_balancer_sg.id]
+  }
+
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "load_balancer_sg" {
+  name = "${terraform.workspace}-${local.project}-${local.stack}-lb-sg"
+  description = "Allow inbound connections"
+  vpc_id = aws_default_vpc.default.id
+
+  ingress {
+    from_port = 80
+    to_port = 80
+    protocol = "TCP"
+    cidr_blocks = local.env_vars[terraform.workspace]["load_balancer_allowed_cidr_blocks"]
   }
 
   egress {
@@ -74,7 +94,7 @@ resource "aws_security_group" "task_sg" {
 
 resource "aws_security_group" "task_ssh_sg" {
   count = local.env_vars[terraform.workspace]["ssh_access_enabled"] ? 1 : 0
-  name = "${terraform.workspace}-${local.project}-${local.stack}-task-sg"
+  name = "${terraform.workspace}-${local.project}-${local.stack}-task-ssh-sg"
   description = "Allow ssh inbound"
   vpc_id = aws_default_vpc.default.id
 
@@ -108,7 +128,22 @@ module "autoscaling_group" {
   vpc_zone_identifier = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
 
   recreate_asg_when_lc_changes = true
-  load_balancers = []
+  load_balancers = [aws_elb.load_balancer.id]
+}
+
+resource "aws_elb" "load_balancer" {
+  name = "${terraform.workspace}-${local.project}-${local.stack}-elb"
+
+  listener {
+    instance_port = local.env_vars[terraform.workspace]["ecs_task_port"]
+    instance_protocol = "http"
+    lb_port = 80
+    lb_protocol = "http"
+  }
+
+  subnets = [aws_default_subnet.default_az1, aws_default_subnet.default_az2]
+  internal = false
+  security_groups = [aws_security_group.load_balancer_sg.id]
 }
 
 data "aws_ami" "amazon_linux_2" {
@@ -132,6 +167,7 @@ resource "local_file" "output" {
   content  = <<EOF
 AWS_ACCOUNT_ID="${data.aws_caller_identity.current.account_id}"
 AWS_REGION="${local.env_vars[terraform.workspace]["aws_region"]}"
+PUBLIC_ENDPOINT="http://${aws_elb.load_balancer.dns_name}"
 EOF
   filename = "terraform_out"
   file_permission = "0744"
