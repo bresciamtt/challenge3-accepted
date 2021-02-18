@@ -22,144 +22,14 @@ resource "aws_default_subnet" "default_az2" {
   availability_zone = "${local.env_vars[terraform.workspace]["aws_region"]}b"
 }
 
-module "ecs" {
-  source = "terraform-aws-modules/ecs/aws"
-  name = "${terraform.workspace}-${local.project}-${local.stack}-cluster"
-}
+module "ecs_cluster" {
+  source = "./modules/ecs-cluster"
 
-resource "aws_ecs_task_definition" "task" {
-  family = "${terraform.workspace}-${local.project}-${local.stack}-task"
-  container_definitions = templatefile(
-    "${path.module}/template/task-definition.json",
-    {
-      task_name = "${terraform.workspace}-${local.project}-${local.stack}-task",
-      registry = var.registry,
-      image_version = var.image_version,
-      cpu = local.env_vars[terraform.workspace]["ecs_task_cpu"]
-      memory = local.env_vars[terraform.workspace]["ecs_task_memory"]
-      container_port = local.env_vars[terraform.workspace]["ecs_task_port"]
-      host_port = local.env_vars[terraform.workspace]["ecs_task_port"]
-    }
-  )
-}
-
-resource "aws_ecs_service" "service" {
-  name = "${terraform.workspace}-${local.project}-${local.stack}-service"
-  cluster = module.ecs.this_ecs_cluster_id
-  task_definition = aws_ecs_task_definition.task.arn
-  desired_count = local.env_vars[terraform.workspace]["ecs_service_desired_count"]
-  deployment_maximum_percent = local.env_vars[terraform.workspace]["ecs_service_deployment_maximum_percent"]
-  deployment_minimum_healthy_percent = local.env_vars[terraform.workspace]["ecs_service_deployment_minimum_healthy_percent"]
-}
-
-resource "aws_security_group" "task_sg" {
-  name = "${terraform.workspace}-${local.project}-${local.stack}-task-sg"
-  description = "Allow inbound from load balancer"
+  image_version = var.image_version
+  registry = var.registry
+  subnet_ids = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
   vpc_id = aws_default_vpc.default.id
-
-  ingress {
-    from_port = local.env_vars[terraform.workspace]["ecs_task_port"]
-    to_port = local.env_vars[terraform.workspace]["ecs_task_port"]
-    protocol = "TCP"
-    security_groups = [aws_security_group.load_balancer_sg.id]
-  }
-
-  egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "load_balancer_sg" {
-  name = "${terraform.workspace}-${local.project}-${local.stack}-lb-sg"
-  description = "Allow inbound connections"
-  vpc_id = aws_default_vpc.default.id
-
-  ingress {
-    from_port = 80
-    to_port = 80
-    protocol = "TCP"
-    cidr_blocks = local.env_vars[terraform.workspace]["load_balancer_allowed_cidr_blocks"]
-  }
-
-  egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "task_ssh_sg" {
-  count = local.env_vars[terraform.workspace]["ssh_access_enabled"] ? 1 : 0
-  name = "${terraform.workspace}-${local.project}-${local.stack}-task-ssh-sg"
-  description = "Allow ssh inbound"
-  vpc_id = aws_default_vpc.default.id
-
-  ingress {
-    from_port = 22
-    to_port = 22
-    protocol = "TCP"
-    cidr_blocks = local.env_vars[terraform.workspace]["ssh_allowed_cidr_blocks"]
-    security_groups = local.env_vars[terraform.workspace]["ssh_allowed_security_groups"]
-  }
-}
-
-module "autoscaling_group" {
-  source = "terraform-aws-modules/autoscaling/aws"
-  name = "${terraform.workspace}-${local.project}-${local.stack}-asg"
-
-  lc_name = "${terraform.workspace}-${local.project}-${local.stack}-lc"
-
-  image_id = data.aws_ami.amazon_linux_2.id
-  instance_type = local.env_vars[terraform.workspace]["asg_instance_type"]
-  security_groups = local.env_vars[terraform.workspace]["ssh_access_enabled"] ? [aws_security_group.task_ssh_sg.id, aws_security_group.task_sg.id] : [aws_security_group.task_sg.id]
-
-  user_data = templatefile("${path.module}/template/user-data.sh", { cluster_id = module.ecs.this_ecs_cluster_id })
-
-  asg_name = "${terraform.workspace}-${local.project}-${local.stack}-asg"
-  desired_capacity = local.env_vars[terraform.workspace]["asg_desired_capacity"]
-  health_check_type = "EC2"
-  max_size = local.env_vars[terraform.workspace]["asg_max_size"]
-  min_size = local.env_vars[terraform.workspace]["asg_min_size"]
-
-  vpc_zone_identifier = [aws_default_subnet.default_az1.id, aws_default_subnet.default_az2.id]
-
-  recreate_asg_when_lc_changes = true
-  load_balancers = [aws_elb.load_balancer.id]
-}
-
-resource "aws_elb" "load_balancer" {
-  name = "${terraform.workspace}-${local.project}-${local.stack}-elb"
-
-  listener {
-    instance_port = local.env_vars[terraform.workspace]["ecs_task_port"]
-    instance_protocol = "http"
-    lb_port = 80
-    lb_protocol = "http"
-  }
-
-  subnets = [aws_default_subnet.default_az1, aws_default_subnet.default_az2]
-  internal = false
-  security_groups = [aws_security_group.load_balancer_sg.id]
-}
-
-data "aws_ami" "amazon_linux_2" {
-  most_recent = true
-
-  owners = ["amazon"]
-
-  filter {
-    name = "name"
-    values = ["amzn-ami-*-amazon-ecs-optimized"]
-  }
-
-  filter {
-    name = "owner-alias"
-    values = ["amazon"]
-  }
+  load_balancer_allowed_cidr_blocks = ["0.0.0.0/0"]
 }
 
 # Handle file outputs
@@ -167,7 +37,7 @@ resource "local_file" "output" {
   content  = <<EOF
 AWS_ACCOUNT_ID="${data.aws_caller_identity.current.account_id}"
 AWS_REGION="${local.env_vars[terraform.workspace]["aws_region"]}"
-PUBLIC_ENDPOINT="http://${aws_elb.load_balancer.dns_name}"
+PUBLIC_ENDPOINT="${module.ecs_cluster.load_balancer_endpoint}"
 EOF
   filename = "terraform_out"
   file_permission = "0744"
