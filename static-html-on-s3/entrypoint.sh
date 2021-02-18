@@ -29,3 +29,5 @@ terraform -chdir=/workspace/terraform init -reconfigure
 terraform -chdir=/workspace/terraform workspace new $TF_ENVIRONMENT
 terraform -chdir=/workspace/terraform apply -auto-approve
 
+source /workspace/terraform/terraform_out
+aws s3 sync ./out s3://$S3_BUCKET_NAME --delete --acl=public-read
