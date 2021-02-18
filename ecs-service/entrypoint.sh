@@ -18,13 +18,15 @@ echo '### Welcome to the ecs-website deployment script! #######'
 echo '###'
 
 if [ -z $AWS_ACCESS_KEY_ID ]; then
-    echo '### AWS Access Key ID: '
-    read -sp '> ' AWS_ACCESS_KEY_ID
+    echo '### Type your AWS Access Key ID: '
+    read -sp '(silent) > ' AWS_ACCESS_KEY_ID
+    echo ''
 fi
 
 if [ -z $AWS_SECRET_ACCESS_KEY ]; then
-    echo '### AWS Secret Access Key: '
-    read -sp '> ' AWS_SECRET_ACCESS_KEY
+    echo '### Type your AWS Secret Access Key: '
+    read -sp '(silent) > ' AWS_SECRET_ACCESS_KEY
+    echo ''
 fi
 
 export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
@@ -32,7 +34,8 @@ export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
 if [ -z $SERVICE_TO_PROVISION ]; then
     echo '### Type the name of the service you want to create/update (ecr/ecs) '
-    read '> ' SERVICE_TO_PROVISION
+    read -p '> ' SERVICE_TO_PROVISION
+    echo ''
 fi
 
 case $SERVICE_TO_PROVISION in
@@ -40,6 +43,7 @@ case $SERVICE_TO_PROVISION in
     echo '### Provisioning the ECR registry...'
     terraform -chdir=/workspace/terraform/ecr init -reconfigure
     terraform -chdir=/workspace/terraform/ecr workspace new $TF_ENVIRONMENT
+    terraform -chdir=/workspace/terraform/ecr workspace select $TF_ENVIRONMENT
     terraform -chdir=/workspace/terraform/ecr apply -auto-approve
     source /workspace/terraform/ecr/terraform_out
     ECR_PWD=$(aws ecr get-login-password --region $AWS_REGION)
@@ -54,6 +58,8 @@ case $SERVICE_TO_PROVISION in
     echo '### Provisioning the ECS cluster...'
     terraform -chdir=/workspace/terraform/ecs init -reconfigure
     terraform -chdir=/workspace/terraform/ecs workspace new $TF_ENVIRONMENT
+    terraform -chdir=/workspace/terraform/ecs workspace select $TF_ENVIRONMENT
+    source /workspace/terraform/ecr/terraform_out
     terraform -chdir=/workspace/terraform/ecs apply -auto-approve -var "registry=$REGISTRY_URL" -var "image_version=latest"
     source /workspace/terraform/ecs/terraform_out
     echo '### The ECS cluster has been provisioned!'
