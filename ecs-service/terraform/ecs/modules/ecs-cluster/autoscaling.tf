@@ -7,7 +7,7 @@ module "autoscaling_group" {
 
   image_id = data.aws_ami.amazon_linux_2.id
   instance_type = var.asg_instance_type
-  security_groups = var.ssh_access_enabled ? [aws_security_group.task_ssh_sg.id, aws_security_group.task_sg.id] : [aws_security_group.task_sg.id]
+  security_groups = var.ssh_access_enabled ? [aws_security_group.task_ssh_sg[0].id, aws_security_group.task_sg.id] : [aws_security_group.task_sg.id]
 
   user_data = templatefile("${path.module}/template/user-data.sh", { cluster_id = module.ecs.this_ecs_cluster_id })
 
