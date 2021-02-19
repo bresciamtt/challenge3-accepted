@@ -24,6 +24,34 @@ resource "aws_s3_bucket" "website" {
   }
 }
 
+# S3 bucket policy
+resource "aws_s3_bucket_policy" "website" {
+  bucket = aws_s3_bucket.website.id
+
+  # Terraform's "jsonencode" function converts a
+  # Terraform expression's result to valid JSON syntax.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "WebsiteBucketPolicy"
+    Statement = [
+      {
+        Sid = "IPBlackList"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "s3:*Object"
+        Resource = [
+          "${aws_s3_bucket.website.arn}/*",
+        ]
+        Condition = {
+          IpAddress = {
+            "aws:SourceIp" = local.env_vars[terraform.workspace]["blacklisted_ips"]
+          }
+        }
+      },
+    ]
+  })
+}
+
 # Handle file outputs
 resource "local_file" "output" {
   content  = <<EOF
