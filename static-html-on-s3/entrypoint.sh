@@ -12,14 +12,20 @@ TF_ENVIRONMENT=${environment:-development}
 AWS_ACCESS_KEY_ID=${aws_access_key_id}
 AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}
 
+echo '#########################################################'
+echo '### Welcome to the static-html-on-s3 deployment script! #'
+echo '###'
+
 if [ -z $AWS_ACCESS_KEY_ID ]; then
-    echo "AWS Access Key ID:"
-    read -s AWS_ACCESS_KEY_ID
+    echo '### Type your AWS Access Key ID: '
+    read -sp '(silent) > ' AWS_ACCESS_KEY_ID
+    echo ''
 fi
 
 if [ -z $AWS_SECRET_ACCESS_KEY ]; then
-    echo "AWS Secret Access Key:"
-    read -s AWS_SECRET_ACCESS_KEY
+    echo '### Type your AWS Secret Access Key: '
+    read -sp '(silent) > ' AWS_SECRET_ACCESS_KEY
+    echo ''
 fi
 
 export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
@@ -27,6 +33,7 @@ export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
 terraform -chdir=/workspace/terraform init -reconfigure
 terraform -chdir=/workspace/terraform workspace new $TF_ENVIRONMENT
+terraform -chdir=/workspace/terraform workspace select $TF_ENVIRONMENT
 terraform -chdir=/workspace/terraform apply -auto-approve
 
 source /workspace/terraform/terraform_out
